@@ -11,21 +11,30 @@ if ($_SESSION['role'] != 'student') {
 
 require 'db.php';
 
+// Get payment ID from URL
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
 // Fetch student information
 $user_id = $_SESSION['user_id'];
-$stmt = $conn->prepare("SELECT * FROM students WHERE id = ?");
+$stmt = $conn->prepare("SELECT * FROM students WHERE user_id = ?");
 $stmt->execute([$user_id]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Fetch fees information
-$stmt = $conn->prepare("SELECT total_fee, balance FROM fees WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$fees = $stmt->fetch(PDO::FETCH_ASSOC);
+// Fetch payment details
+$stmt = $conn->prepare("
+    SELECT p.*, s.fullname as student_name, s.level
+    FROM payments p 
+    JOIN students s ON p.user_id = s.user_id 
+    WHERE p.id = ? AND p.user_id = ?
+");
+$stmt->execute([$id, $user_id]);
+$payment = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Calculate payment progress
-$total_paid = $fees ? ($fees['total_fee'] - $fees['balance']) : 0;
-$payment_percentage = $fees && $fees['total_fee'] > 0 ? 
-    round(($total_paid / $fees['total_fee']) * 100) : 0;
+// If payment not found or doesn't belong to student, redirect to dashboard
+if (!$payment) {
+    header("Location: student_dashboard.php");
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -33,7 +42,7 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Check Balance - Student Fees Portal</title>
+    <title>Payment Receipt - Student Fees Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -147,91 +156,87 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
             color: #2d3748;
         }
 
-        .balance-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .balance-card {
+        .receipt-container {
+            max-width: 800px;
+            margin: 0 auto;
             background: #fff;
-            padding: 1.5rem;
+            padding: 2rem;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
-        .balance-card h3 {
-            color: #4a5568;
-            font-size: 1rem;
-            font-weight: 500;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e2e8f0;
         }
 
-        .balance-amount {
-            font-size: 2rem;
-            font-weight: 600;
+        .receipt-header h2 {
             color: #2d3748;
+            font-size: 1.5rem;
             margin-bottom: 0.5rem;
         }
 
-        .balance-label {
+        .receipt-header p {
             color: #718096;
             font-size: 0.875rem;
         }
 
-        .progress-container {
-            background: #fff;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        .receipt-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-bottom: 2rem;
         }
 
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .detail-group {
             margin-bottom: 1rem;
         }
 
-        .progress-title {
-            color: #4a5568;
-            font-size: 1rem;
+        .detail-label {
+            color: #718096;
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .detail-value {
+            color: #2d3748;
             font-weight: 500;
         }
 
-        .progress-percentage {
-            color: #3182ce;
+        .amount-section {
+            text-align: center;
+            padding: 2rem;
+            background-color: #f7fafc;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .amount-label {
+            color: #718096;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .amount-value {
+            color: #2d3748;
+            font-size: 2rem;
             font-weight: 600;
         }
 
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background-color: #edf2f7;
-            border-radius: 9999px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background-color: #3182ce;
-            transition: width 0.3s ease;
-        }
-
-        .progress-details {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 1rem;
+        .receipt-footer {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
             color: #718096;
             font-size: 0.875rem;
         }
 
         .action-buttons {
             display: flex;
+            justify-content: center;
             gap: 1rem;
             margin-top: 2rem;
         }
@@ -265,6 +270,43 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
             background-color: #e2e8f0;
         }
 
+        .print-button {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 0.75rem 1.5rem;
+            background-color: #3182ce;
+            color: #fff;
+            border: none;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .print-button:hover {
+            background-color: #2c5282;
+        }
+
+        @media print {
+            .sidebar, .action-buttons, .print-button {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 0;
+            }
+
+            .receipt-container {
+                box-shadow: none;
+            }
+        }
+
         @media (max-width: 768px) {
             .dashboard-container {
                 flex-direction: column;
@@ -280,7 +322,7 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                 margin-left: 0;
             }
 
-            .balance-container {
+            .receipt-details {
                 grid-template-columns: 1fr;
             }
 
@@ -303,8 +345,8 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                 <h2>Student Portal</h2>
             </div>
             <div class="student-info">
-                <p class="student-name"><?php echo htmlspecialchars($student['name'] ?? 'Student'); ?></p>
-                <p class="student-id">ID: <?php echo htmlspecialchars($student['student_id'] ?? 'N/A'); ?></p>
+                <p class="student-name"><?php echo htmlspecialchars($student['fullname'] ?? 'Student'); ?></p>
+                <p class="student-id">Level: <?php echo htmlspecialchars($student['level'] ?? 'N/A'); ?></p>
             </div>
             <nav class="nav-menu">
                 <a href="student_dashboard.php" class="nav-item">
@@ -319,7 +361,7 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                     <i class="fas fa-history"></i>
                     Payment History
                 </a>
-                <a href="check_balance.php" class="nav-item active">
+                <a href="check_balance.php" class="nav-item">
                     <i class="fas fa-wallet"></i>
                     Check Balance
                 </a>
@@ -332,60 +374,61 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
 
         <main class="main-content">
             <div class="header">
-                <h1 class="welcome-text">Fee Balance</h1>
+                <h1 class="welcome-text">Payment Receipt</h1>
             </div>
 
-            <div class="balance-container">
-                <div class="balance-card">
-                    <h3><i class="fas fa-money-bill-wave"></i> Total Fee</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($fees['total_fee'] ?? 0, 2); ?>
+            <div class="receipt-container">
+                <div class="receipt-header">
+                    <h2>Payment Receipt</h2>
+                    <p>Student Fees Payment Portal</p>
+                </div>
+
+                <div class="receipt-details">
+                    <div class="detail-group">
+                        <div class="detail-label">Receipt Number</div>
+                        <div class="detail-value"><?php echo str_pad($payment['id'], 8, '0', STR_PAD_LEFT); ?></div>
                     </div>
-                    <div class="balance-label">Total amount to be paid</div>
-                </div>
-
-                <div class="balance-card">
-                    <h3><i class="fas fa-wallet"></i> Outstanding Balance</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($fees['balance'] ?? 0, 2); ?>
+                    <div class="detail-group">
+                        <div class="detail-label">Date</div>
+                        <div class="detail-value"><?php echo date('d M Y', strtotime($payment['paid_at'])); ?></div>
                     </div>
-                    <div class="balance-label">Amount remaining to be paid</div>
-                </div>
-
-                <div class="balance-card">
-                    <h3><i class="fas fa-check-circle"></i> Amount Paid</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($total_paid, 2); ?>
+                    <div class="detail-group">
+                        <div class="detail-label">Student Name</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($payment['student_name']); ?></div>
                     </div>
-                    <div class="balance-label">Total amount paid so far</div>
+                    <div class="detail-group">
+                        <div class="detail-label">Level</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($payment['level']); ?></div>
+                    </div>
                 </div>
-            </div>
 
-            <div class="progress-container">
-                <div class="progress-header">
-                    <div class="progress-title">Payment Progress</div>
-                    <div class="progress-percentage"><?php echo $payment_percentage; ?>%</div>
+                <div class="amount-section">
+                    <div class="amount-label">Amount Paid</div>
+                    <div class="amount-value">ZWL <?php echo number_format($payment['amount'], 2); ?></div>
                 </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: <?php echo $payment_percentage; ?>%"></div>
-                </div>
-                <div class="progress-details">
-                    <span>Paid: ZWL <?php echo number_format($total_paid, 2); ?></span>
-                    <span>Total: ZWL <?php echo number_format($fees['total_fee'] ?? 0, 2); ?></span>
-                </div>
-            </div>
 
-            <div class="action-buttons">
-                <a href="make_payment.php" class="action-button primary-button">
-                    <i class="fas fa-money-bill-wave"></i>
-                    Make Payment
-                </a>
-                <a href="payment_history.php" class="action-button secondary-button">
-                    <i class="fas fa-history"></i>
-                    View Payment History
-                </a>
+                <div class="receipt-footer">
+                    <p>This is an official receipt for your payment.</p>
+                    <p>Please keep this receipt for your records.</p>
+                </div>
+
+                <div class="action-buttons">
+                    <a href="payment_history.php" class="action-button secondary-button">
+                        <i class="fas fa-history"></i>
+                        Back to Payment History
+                    </a>
+                    <button onclick="window.print()" class="action-button primary-button">
+                        <i class="fas fa-print"></i>
+                        Print Receipt
+                    </button>
+                </div>
             </div>
         </main>
     </div>
+
+    <button onclick="window.print()" class="print-button">
+        <i class="fas fa-print"></i>
+        Print Receipt
+    </button>
 </body>
 </html>

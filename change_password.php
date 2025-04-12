@@ -17,15 +17,36 @@ $stmt = $conn->prepare("SELECT * FROM students WHERE id = ?");
 $stmt->execute([$user_id]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Fetch fees information
-$stmt = $conn->prepare("SELECT total_fee, balance FROM fees WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$fees = $stmt->fetch(PDO::FETCH_ASSOC);
+$message = "";
+$messageType = "";
 
-// Calculate payment progress
-$total_paid = $fees ? ($fees['total_fee'] - $fees['balance']) : 0;
-$payment_percentage = $fees && $fees['total_fee'] > 0 ? 
-    round(($total_paid / $fees['total_fee']) * 100) : 0;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $current = $_POST['current_password'];
+    $new = $_POST['new_password'];
+    $confirm = $_POST['confirm_password'];
+
+    // Get current password hash
+    $stmt = $conn->prepare("SELECT password FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch();
+
+    if (!$user || !password_verify($current, $user['password'])) {
+        $message = "Current password is incorrect.";
+        $messageType = "error";
+    } elseif ($new !== $confirm) {
+        $message = "New passwords do not match.";
+        $messageType = "error";
+    } elseif (strlen($new) < 8) {
+        $message = "Password must be at least 8 characters long.";
+        $messageType = "error";
+    } else {
+        $hashed = password_hash($new, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $stmt->execute([$hashed, $user_id]);
+        $message = "Password updated successfully.";
+        $messageType = "success";
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -33,7 +54,7 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Check Balance - Student Fees Portal</title>
+    <title>Change Password - Student Fees Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -147,122 +168,107 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
             color: #2d3748;
         }
 
-        .balance-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .balance-card {
+        .password-form-container {
+            max-width: 500px;
+            margin: 0 auto;
             background: #fff;
-            padding: 1.5rem;
+            padding: 2rem;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
-        .balance-card h3 {
-            color: #4a5568;
-            font-size: 1rem;
-            font-weight: 500;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        .form-group {
+            margin-bottom: 1.5rem;
         }
 
-        .balance-amount {
-            font-size: 2rem;
-            font-weight: 600;
-            color: #2d3748;
+        .form-group label {
+            display: block;
             margin-bottom: 0.5rem;
-        }
-
-        .balance-label {
-            color: #718096;
-            font-size: 0.875rem;
-        }
-
-        .progress-container {
-            background: #fff;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .progress-title {
             color: #4a5568;
-            font-size: 1rem;
             font-weight: 500;
         }
 
-        .progress-percentage {
-            color: #3182ce;
-            font-weight: 600;
-        }
-
-        .progress-bar {
+        .form-group input {
             width: 100%;
-            height: 8px;
-            background-color: #edf2f7;
-            border-radius: 9999px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background-color: #3182ce;
-            transition: width 0.3s ease;
-        }
-
-        .progress-details {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 1rem;
-            color: #718096;
-            font-size: 0.875rem;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 1rem;
-            margin-top: 2rem;
-        }
-
-        .action-button {
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
             border-radius: 0.375rem;
-            font-weight: 500;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 1rem;
             transition: all 0.3s ease;
         }
 
-        .primary-button {
-            background-color: #3182ce;
-            color: #fff;
+        .form-group input:focus {
+            outline: none;
+            border-color: #3182ce;
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
         }
 
-        .primary-button:hover {
+        .submit-button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #3182ce;
+            color: #fff;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .submit-button:hover {
             background-color: #2c5282;
         }
 
-        .secondary-button {
-            background-color: #edf2f7;
+        .message {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .message.error {
+            background-color: #fff5f5;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+        }
+
+        .message.success {
+            background-color: #f0fff4;
+            color: #2f855a;
+            border: 1px solid #9ae6b4;
+        }
+
+        .password-requirements {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: #f7fafc;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
             color: #4a5568;
         }
 
-        .secondary-button:hover {
-            background-color: #e2e8f0;
+        .password-requirements h4 {
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+            font-weight: 500;
+        }
+
+        .password-requirements ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .password-requirements li {
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .password-requirements li i {
+            color: #718096;
         }
 
         @media (max-width: 768px) {
@@ -280,17 +286,8 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                 margin-left: 0;
             }
 
-            .balance-container {
-                grid-template-columns: 1fr;
-            }
-
-            .action-buttons {
-                flex-direction: column;
-            }
-
-            .action-button {
-                width: 100%;
-                justify-content: center;
+            .password-form-container {
+                margin: 0 1rem;
             }
         }
     </style>
@@ -319,11 +316,11 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                     <i class="fas fa-history"></i>
                     Payment History
                 </a>
-                <a href="check_balance.php" class="nav-item active">
+                <a href="check_balance.php" class="nav-item">
                     <i class="fas fa-wallet"></i>
                     Check Balance
                 </a>
-                <a href="change_password.php" class="nav-item">
+                <a href="change_password.php" class="nav-item active">
                     <i class="fas fa-key"></i>
                     Change Password
                 </a>
@@ -332,58 +329,50 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
 
         <main class="main-content">
             <div class="header">
-                <h1 class="welcome-text">Fee Balance</h1>
+                <h1 class="welcome-text">Change Password</h1>
             </div>
 
-            <div class="balance-container">
-                <div class="balance-card">
-                    <h3><i class="fas fa-money-bill-wave"></i> Total Fee</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($fees['total_fee'] ?? 0, 2); ?>
+            <div class="password-form-container">
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="current_password">Current Password</label>
+                        <input type="password" id="current_password" name="current_password" required>
                     </div>
-                    <div class="balance-label">Total amount to be paid</div>
-                </div>
 
-                <div class="balance-card">
-                    <h3><i class="fas fa-wallet"></i> Outstanding Balance</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($fees['balance'] ?? 0, 2); ?>
+                    <div class="form-group">
+                        <label for="new_password">New Password</label>
+                        <input type="password" id="new_password" name="new_password" required>
                     </div>
-                    <div class="balance-label">Amount remaining to be paid</div>
-                </div>
 
-                <div class="balance-card">
-                    <h3><i class="fas fa-check-circle"></i> Amount Paid</h3>
-                    <div class="balance-amount">
-                        ZWL <?php echo number_format($total_paid, 2); ?>
+                    <div class="form-group">
+                        <label for="confirm_password">Confirm New Password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required>
                     </div>
-                    <div class="balance-label">Total amount paid so far</div>
-                </div>
-            </div>
 
-            <div class="progress-container">
-                <div class="progress-header">
-                    <div class="progress-title">Payment Progress</div>
-                    <div class="progress-percentage"><?php echo $payment_percentage; ?>%</div>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: <?php echo $payment_percentage; ?>%"></div>
-                </div>
-                <div class="progress-details">
-                    <span>Paid: ZWL <?php echo number_format($total_paid, 2); ?></span>
-                    <span>Total: ZWL <?php echo number_format($fees['total_fee'] ?? 0, 2); ?></span>
-                </div>
-            </div>
+                    <button type="submit" class="submit-button">
+                        <i class="fas fa-key"></i> Update Password
+                    </button>
+                </form>
 
-            <div class="action-buttons">
-                <a href="make_payment.php" class="action-button primary-button">
-                    <i class="fas fa-money-bill-wave"></i>
-                    Make Payment
-                </a>
-                <a href="payment_history.php" class="action-button secondary-button">
-                    <i class="fas fa-history"></i>
-                    View Payment History
-                </a>
+                <?php if ($message): ?>
+                    <div class="message <?php echo $messageType; ?>">
+                        <?php if ($messageType === 'success'): ?>
+                            <i class="fas fa-check-circle"></i>
+                        <?php else: ?>
+                            <i class="fas fa-exclamation-circle"></i>
+                        <?php endif; ?>
+                        <?php echo $message; ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="password-requirements">
+                    <h4>Password Requirements</h4>
+                    <ul>
+                        <li><i class="fas fa-check"></i> At least 8 characters long</li>
+                        <li><i class="fas fa-check"></i> Include a mix of letters and numbers</li>
+                        <li><i class="fas fa-check"></i> Use a unique password not used elsewhere</li>
+                    </ul>
+                </div>
             </div>
         </main>
     </div>
