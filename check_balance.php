@@ -345,15 +345,40 @@ $payment_percentage = $fees && $fees['total_fee'] > 0 ?
                 </div>
 
                 <div class="balance-card">
-                    <h3><i class="fas fa-wallet"></i> Outstanding Balance</h3>
+                    <h3><i class="fas fa-wallet"></i> Payment Status</h3>
                     <div class="balance-amount">
-                        ZWL <?php echo number_format($fees['balance'] ?? 0, 2); ?>
+                        <?php
+                            if ($fees) {
+                                if ($fees['balance'] > 0) {
+                                    echo 'Outstanding: ZWL ' . number_format($fees['balance'], 2);
+                                } elseif ($fees['balance'] < 0) {
+                                    echo 'Excess Payment: ZWL ' . number_format(abs($fees['balance']), 2);
+                                } else {
+                                    echo 'Fully Paid';
+                                }
+                            } else {
+                                echo 'No Fee Information Available';
+                            }
+                        ?>
                     </div>
-                    <div class="balance-label">Amount remaining to be paid</div>
+                    <div class="balance-label">
+                        <?php
+                            if ($fees) {
+                                if ($fees['balance'] > 0) {
+                                    echo 'You still owe this amount.';
+                                } elseif ($fees['balance'] < 0) {
+                                    echo 'You have overpaid by this amount.';
+                                } else {
+                                    echo 'All fees are cleared.';
+                                }
+                            }
+                        ?>
+                    </div>
                 </div>
 
+
                 <div class="balance-card">
-                    <h3><i class="fas fa-check-circle"></i> Amount Paid</h3>
+                    <h3><i class="fas fa-checkf-circle"></i> Amount Paid</h3>
                     <div class="balance-amount">
                         ZWL <?php echo number_format($total_paid, 2); ?>
                     </div>

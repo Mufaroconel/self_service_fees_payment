@@ -5,14 +5,15 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL & ~E_DEPRECATED);
 
 session_start();
-file_put_contents("before.txt", print_r($_SESSION, true));
-echo session_save_path();
+// echo session_save_path();
 if ($_SESSION['role'] != 'student') {
     header("Location: index.html");
     exit();
 }
 
 require 'db.php';
+require 'payment_initiated_helper.php';
+
 // Include our fix for the deprecated utf8_encode function
 require_once 'fix_utf8_encode.php';
 require_once 'vendor/autoload.php'; // Paynow SDK
@@ -48,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $payment_reference = $_POST['payment_reference'];
     $email = $_POST['email'];
     $phone = $_POST['phone'];
-
+    $_SESSION['payment_amount'] = $amount;
     // Validate amount
     if ($amount <= 0) {
         $error = "❌ Please enter a valid amount.";
@@ -71,7 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             if ($response->success()) {
                 // Save reference for verification later
-                $_SESSION['paynow_reference'] = $response->pollUrl;
+                $_SESSION['poll_url'] = $response->pollUrl();
+                $_SESSION['paynow_guid'] = str_replace('guid=', '', parse_url($response->pollUrl(), PHP_URL_QUERY));
+                $initiate_payment = insertPaymentInitiation($user_id, $amount);
                 header("Location: " . $response->redirectUrl());
                 exit;
             } else {

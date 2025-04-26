@@ -3,4 +3,7 @@ Array
     [user_id] => 2
     [role] => student
     [paynow_reference] => 
+    [poll_url] => https://www.paynow.co.zw/Interface/CheckPayment/?guid=0b9e5730-585a-4fa5-8b01-4377fa691fd7
+    [paynow_guid] => 0b9e5730-585a-4fa5-8b01-4377fa691fd7
+    [payment_amount] => 90
 )

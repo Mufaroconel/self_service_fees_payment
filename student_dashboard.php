@@ -336,7 +336,7 @@ $last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] :
                 </div>
                 <div class="stat-card">
                     <h3>Total Paid</h3>
-                    <div class="value">ZWL <?php echo number_format($fees['total_paid'] ?? 0, 2); ?></div>
+                    <div class="value">ZWL <?php echo number_format($payment['amount'] ?? 0, 2); ?></div>
                 </div>
                 <div class="stat-card">
                     <h3>Last Payment</h3>
