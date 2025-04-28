@@ -10,44 +10,53 @@ if ($_SESSION['role'] != 'admin') {
 $error = '';
 $success = '';
 
-// Handle form submission
+// Handle fee setting
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $username = $_POST['username'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $fullname = $_POST['fullname'];
-    $level = $_POST['level'];
-    $accommodation = $_POST['accommodation'];
-    $role = "student";
+    $program = $_POST['program'];
+    $program_fee = $_POST['program_fee'];
+    $accommodation_fee = $_POST['accommodation_fee'];
 
     try {
         $conn->beginTransaction();
 
-        // Insert into users table
-        $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-        $stmt->execute([$username, $password, $role]);
-        $user_id = $conn->lastInsertId();
-
-        // Insert into students table
-        $stmt = $conn->prepare("INSERT INTO students (user_id, fullname, level, accommodation) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$user_id, $fullname, $level, $accommodation]);
+        // Check if program already exists
+        $stmt = $conn->prepare("SELECT id FROM fees_structure WHERE program = ?");
+        $stmt->execute([$program]);
+        if ($stmt->rowCount() > 0) {
+            // Update existing record
+            $stmt = $conn->prepare("UPDATE fees_structure SET program_fee = ?, accommodation_fee = ? WHERE program = ?");
+            $stmt->execute([$program_fee, $accommodation_fee, $program]);
+        } else {
+            // Insert new record
+            $stmt = $conn->prepare("INSERT INTO fees_structure (program, program_fee, accommodation_fee) VALUES (?, ?, ?)");
+            $stmt->execute([$program, $program_fee, $accommodation_fee]);
+        }
 
         $conn->commit();
-        $success = "✅ Student account created successfully.";
+        $success = "✅ Fees set successfully.";
     } catch (Exception $e) {
         $conn->rollBack();
-        $error = "❌ Failed to create student: " . $e->getMessage();
+        $error = "❌ Failed to set fees: " . $e->getMessage();
     }
 }
+
+// Fetch existing fees
+$stmt = $conn->prepare("SELECT * FROM fees_structure");
+$stmt->execute();
+$fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- (same head section as your current page, styles and links) -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Student - Admin Dashboard</title>
+    <title>Set Fees - Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        /* Same styles as before (copy your styles here)... */
         * {
             margin: 0;
             padding: 0;
@@ -66,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             min-height: 100vh;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             width: 250px;
             background-color: #1a1f36;
@@ -114,7 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             font-size: 1.25rem;
         }
 
-        /* Main Content Styles */
         .main-content {
             flex: 1;
             margin-left: 250px;
@@ -138,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .form-container {
             max-width: 600px;
-            margin: 0 auto;
+            margin: 0 auto 2rem;
             background: #fff;
             padding: 2rem;
             border-radius: 0.5rem;
@@ -206,6 +213,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: #c53030;
         }
 
+        table {
+            width: 100%;
+            background: #fff;
+            border-collapse: collapse;
+            margin-top: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        table thead {
+            background-color: #3182ce;
+            color: #fff;
+        }
+
+        table th, table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        table tr:hover {
+            background-color: #f1f5f9;
+        }
+
         @media (max-width: 768px) {
             .dashboard-container {
                 flex-direction: column;
@@ -222,7 +254,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div class="dashboard-container">
@@ -235,13 +266,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <i class="fas fa-home"></i>
                     Dashboard
                 </a>
-                <a href="create_student.php" class="nav-item active">
+                <a href="create_student.php" class="nav-item">
                     <i class="fas fa-user-plus"></i>
                     Create Student
                 </a>
-                <a href="set_fees.php" class="nav-item">
-                    <i class="fas fa-coins"></i> Set Fees
-                </a>            
+                <a href="set_fees.php" class="nav-item active">
+                    <i class="fas fa-money-check-alt"></i>
+                    Set Fees
+                </a>
                 <a href="manage_fees.php" class="nav-item">
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
@@ -259,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <main class="main-content">
             <div class="header">
-                <h1 class="welcome-text">Create Student Account</h1>
+                <h1 class="welcome-text">Set Program & Accommodation Fees</h1>
             </div>
 
             <div class="form-container">
@@ -272,48 +304,63 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 <form method="POST" action="">
                     <div class="form-group">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="fullname">Full Name</label>
-                        <input type="text" id="fullname" name="fullname" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="level">Level</label>
-                        <select id="level" name="level" required>
-                            <option value="">Select Level</option>
-                            <option value="1.1">1.1</option>
-                            <option value="1.2">1.2</option>
-                            <option value="2.1">2.1</option>
-                            <option value="2.2">2.2</option>
-                            <option value="3.1">3.1</option>
-                            <option value="3.2">3.2</option>
-                            <option value="4.1">4.1</option>
-                            <option value="4.2">4.2</option>
+                        <label for="program">Program</label>
+                        <select id="program" name="program" required>
+                            <option value="">-- Select Program --</option>
+                            <option value="Computer Science">Computer Science</option>
+                            <option value="Business Administration">Business Administration</option>
+                            <option value="Accounting">Accounting</option>
+                            <option value="Engineering">Engineering</option>
+                            <option value="Law">Law</option>
+                            <!-- You can add more programs here -->
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label for="accommodation">Accommodation</label>
-                        <select id="accommodation" name="accommodation" required>
-                            <option value="">Select Accommodation</option>
-                            <option value="Resident">Resident</option>
-                            <option value="Non-Resident">Non-Resident</option>
-                        </select>
+                        <label for="program_fee">Program Fee (USD)</label>
+                        <input type="number" id="program_fee" name="program_fee" step="0.01" required>
                     </div>
 
-                    <button type="submit" class="submit-button">Create Student Account</button>
+                    <div class="form-group">
+                        <label for="accommodation_fee">Accommodation Fee (USD)</label>
+                        <input type="number" id="accommodation_fee" name="accommodation_fee" step="0.01" required>
+                    </div>
+
+                    <button type="submit" class="submit-button">Save Fees</button>
                 </form>
+            </div>
+
+            <div style="margin-top: 3rem;">
+                <h2 style="margin-bottom: 1rem; font-size: 1.5rem; font-weight: 600;">Current Fees Table</h2>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background-color: #3182ce; color: #fff;">
+                                <th style="padding: 0.75rem; text-align: left;">Program</th>
+                                <th style="padding: 0.75rem; text-align: left;">Program Fee (USD)</th>
+                                <th style="padding: 0.75rem; text-align: left;">Accommodation Fee (USD)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (count($fees) > 0): ?>
+                                <?php foreach ($fees as $fee): ?>
+                                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 0.75rem;"><?php echo htmlspecialchars($fee['program']); ?></td>
+                                        <td style="padding: 0.75rem;"><?php echo number_format($fee['program_fee'], 2); ?></td>
+                                        <td style="padding: 0.75rem;"><?php echo number_format($fee['accommodation_fee'], 2); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="3" style="padding: 1rem; text-align: center;">No fees set yet.</td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </main>
     </div>
 </body>
 </html>
+

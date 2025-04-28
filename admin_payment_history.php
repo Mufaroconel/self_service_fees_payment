@@ -1,4 +1,8 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
 require 'db.php';
 
@@ -7,23 +11,62 @@ if ($_SESSION['role'] != 'admin') {
     exit();
 }
 
-// Fetch all students with their fees information
-$stmt = $conn->prepare("
-    SELECT s.id, s.fullname, s.level, s.accommodation, f.total_fee, f.balance
-    FROM students s
-    LEFT JOIN fees f ON s.user_id = f.user_id
-    ORDER BY s.fullname
-");
+// Initialize filter and search variables
+$filter_name = isset($_GET['name']) ? $_GET['name'] : '';
+$filter_date = isset($_GET['date']) ? $_GET['date'] : '';
+$search_query = isset($_GET['search']) ? $_GET['search'] : '';
+
+// Construct query with optional filters and search
+$query = "
+    SELECT p.id, s.fullname, p.amount, p.paid_at
+    FROM payments p
+    LEFT JOIN students s ON p.user_id = s.user_id
+    WHERE 1
+";
+
+// Filter by student name
+if ($filter_name) {
+    $query .= " AND s.fullname LIKE :name";
+}
+
+// Filter by payment date
+if ($filter_date) {
+    $query .= " AND DATE(p.paid_at) = :date";
+}
+
+// Search by student name or amount
+if ($search_query) {
+    $query .= " AND (s.fullname LIKE :search OR p.amount LIKE :search)";
+}
+
+$query .= " ORDER BY p.paid_at DESC";
+
+$stmt = $conn->prepare($query);
+
+// Bind parameters for filtering and searching
+if ($filter_name) {
+    $stmt->bindValue(':name', '%' . $filter_name . '%');
+}
+
+if ($filter_date) {
+    $stmt->bindValue(':date', $filter_date);
+}
+
+if ($search_query) {
+    $stmt->bindValue(':search', '%' . $search_query . '%');
+}
+
 $stmt->execute();
-$students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Fees - Admin Dashboard</title>
+    <title>Manage Payments - Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -158,69 +201,37 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         tr:hover {
-            background-color: #f7fafc;
+            background-color: #f1f5f9;
         }
 
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 500;
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #4a5568;
         }
 
-        .status-paid {
-            background-color: #c6f6d5;
-            color: #2f855a;
-        }
-
-        .status-pending {
-            background-color: #fefcbf;
-            color: #975a16;
+        .empty-state i {
+            margin-bottom: 1rem;
+            color: #cbd5e0;
         }
 
         .action-link {
             color: #3182ce;
             text-decoration: none;
             font-weight: 500;
-            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .action-link:hover {
             color: #2c5282;
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: #718096;
-        }
-
-        @media (max-width: 768px) {
-            .dashboard-container {
-                flex-direction: column;
-            }
-
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: relative;
-            }
-
-            .main-content {
-                margin-left: 0;
-            }
-
-            .table-container {
-                overflow-x: auto;
-            }
-
-            table {
-                min-width: 800px;
-            }
-        }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+<body>
 <body>
     <div class="dashboard-container">
         <aside class="sidebar">
@@ -228,7 +239,8 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <h2>Admin Portal</h2>
             </div>
             <nav class="nav-menu">
-                <a href="admin_dashboard.php" class="nav-item">
+                <!-- Sidebar links -->
+                <a href="#" class="nav-item active">
                     <i class="fas fa-home"></i>
                     Dashboard
                 </a>
@@ -239,7 +251,8 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <a href="set_fees.php" class="nav-item">
                     <i class="fas fa-coins"></i> Set Fees
                 </a>
-                <a href="manage_fees.php" class="nav-item active">
+
+                <a href="manage_fees.php" class="nav-item">
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
                 </a>
@@ -256,60 +269,56 @@ $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         <main class="main-content">
             <div class="header">
-                <h1 class="welcome-text">Manage Student Fees</h1>
-                <a href="set_fees.php" class="action-button">
-                    <i class="fas fa-plus"></i>
-                    Set New Fees
+                <h1 class="welcome-text">Payment History</h1>
+                <a href="record_payment.php" class="action-button">
+                    <i class="fas fa-plus"></i> Record Payment
                 </a>
             </div>
 
-            <div class="table-container">
-                <?php if (empty($students)): ?>
-                    <div class="empty-state">
-                        <i class="fas fa-users fa-3x" style="margin-bottom: 1rem; color: #cbd5e0;"></i>
-                        <p>No students found. Create a student account first.</p>
-                    </div>
-                <?php else: ?>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Student Name</th>
-                                <th>Level</th>
-                                <th>Accommodation</th>
-                                <th>Total Fee</th>
-                                <th>Balance</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($students as $student): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($student['fullname']); ?></td>
-                                    <td><?php echo htmlspecialchars($student['level']); ?></td>
-                                    <td><?php echo htmlspecialchars($student['accommodation']); ?></td>
-                                    <td>ZWL <?php echo number_format($student['total_fee'] ?? 0, 2); ?></td>
-                                    <td>ZWL <?php echo number_format($student['balance'] ?? 0, 2); ?></td>
-                                    <td>
-                                        <?php if (($student['balance'] ?? 0) <= 0): ?>
-                                            <span class="status-badge status-paid">Paid</span>
-                                        <?php else: ?>
-                                            <span class="status-badge status-pending">Pending</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <a href="edit_fee.php?id=<?php echo $student['id']; ?>" class="action-link">
-                                            <i class="fas fa-edit"></i>
-                                            Edit
-                                        </a>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
+            <!-- Filter form -->
+            <div class="filter-form">
+                <form method="get" action="">
+                    <input type="text" name="name" placeholder="Filter by Student Name" value="<?php echo htmlspecialchars($filter_name); ?>">
+                    <input type="date" name="date" value="<?php echo htmlspecialchars($filter_date); ?>">
+                    <button type="submit">Filter</button>
+                </form>
             </div>
+
+            <!-- Search form -->
+            <div class="search-form">
+                <form method="get" action="">
+                    <input type="text" name="search" placeholder="Search by Student Name or Amount" value="<?php echo htmlspecialchars($search_query); ?>">
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+
+            <!-- Payments table -->
+            <table class="payments-table">
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Amount Paid</th>
+                        <th>Payment Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (count($payments) > 0): ?>
+                        <?php foreach ($payments as $payment): ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($payment['fullname']); ?></td>
+                                <td><?php echo htmlspecialchars($payment['amount']); ?></td>
+                                <td><?php echo htmlspecialchars($payment['paid_at']); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="3">No payments found.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </main>
     </div>
 </body>
 </html>
+

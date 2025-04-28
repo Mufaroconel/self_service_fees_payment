@@ -219,6 +219,10 @@ if ($_SESSION['role'] != 'admin') {
                     <i class="fas fa-user-plus"></i>
                     Create Student
                 </a>
+                <a href="set_fees.php" class="nav-item">
+                    <i class="fas fa-coins"></i> Set Fees
+                </a>
+
                 <a href="manage_fees.php" class="nav-item">
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
@@ -272,7 +276,10 @@ if ($_SESSION['role'] != 'admin') {
                         <i class="fas fa-money-bill-wave"></i>
                         Update Fees
                     </a>
-                    <a href="payment_history.php" class="action-button">
+                    <a href="set_fees.php" class="action-button">
+                        <i class="fas fa-coins"></i> Set Fees
+                    </a>
+                    <a href="admin_payment_history.php" class="action-button">
                         <i class="fas fa-history"></i>
                         View Payments
                     </a>

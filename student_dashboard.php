@@ -298,7 +298,7 @@ $last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] :
             </div>
             <div class="student-info">
                 <p class="student-name"><?php echo htmlspecialchars($student['name'] ?? 'Student'); ?></p>
-                <p class="student-id">ID: <?php echo htmlspecialchars($student['student_id'] ?? 'N/A'); ?></p>
+                <p class="student-id">ID: <?php echo htmlspecialchars($student['id'] ?? 'N/A'); ?></p>
             </div>
             <nav class="nav-menu">
                 <a href="#" class="nav-item active">
