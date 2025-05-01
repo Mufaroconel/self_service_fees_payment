@@ -4,32 +4,58 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 session_start();
-if ($_SESSION['role'] != 'student') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
     header("Location: index.html");
     exit();
 }
 
 require 'db.php';
 
-// Fetch student information
 $user_id = $_SESSION['user_id'];
-$stmt = $conn->prepare("SELECT * FROM students WHERE id = ?");
+
+// Fetch detailed student information
+$stmt = $conn->prepare("
+    SELECT 
+        s.id, s.fullname, s.email, s.phone,
+        s.program, s.level
+    FROM students s 
+    WHERE s.id = ?
+");
 $stmt->execute([$user_id]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Fetch fees information
-$stmt = $conn->prepare("SELECT * FROM fees WHERE user_id = ?");
+// Fetch fee breakdown and compute balance
+$stmt = $conn->prepare("
+    SELECT 
+        f.total_fee,
+        COALESCE(SUM(p.amount), 0) AS total_paid,
+        (f.total_fee - COALESCE(SUM(p.amount), 0)) AS balance
+    FROM fees f
+    LEFT JOIN payments p ON f.user_id = p.user_id
+    WHERE f.user_id = ?
+    GROUP BY f.id, f.total_fee
+");
+
 $stmt->execute([$user_id]);
 $fees = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Fetch recent payments
-$stmt = $conn->prepare("SELECT * FROM payments WHERE user_id = ? ORDER BY paid_at DESC LIMIT 5");
+// Fetch last 5 payments with extra details
+$stmt = $conn->prepare("
+    SELECT 
+        p.amount, p.paid_at, p.paynow_guid, p.poll_url
+    FROM payments p
+    WHERE p.user_id = ? 
+    ORDER BY p.paid_at DESC 
+    LIMIT 5
+");
+
 $stmt->execute([$user_id]);
 $recent_payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get the last payment date
-$last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] : null;
+$last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] : 'No payments yet.';
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -317,6 +343,11 @@ $last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] :
                     <i class="fas fa-wallet"></i>
                     Check Balance
                 </a>
+                <a href="student_notification.php" class="nav-item">
+                    <i class="fas fa-bell"></i> 
+                    Notifications
+                </a>
+
                 <a href="change_password.php" class="nav-item">
                     <i class="fas fa-key"></i>
                     Change Password
@@ -325,58 +356,65 @@ $last_payment_date = !empty($recent_payments) ? $recent_payments[0]['paid_at'] :
         </aside>
 
         <main class="main-content">
-            <div class="header">
-                <h1 class="welcome-text">Welcome, <?php echo htmlspecialchars($student['name'] ?? 'Student'); ?></h1>
-            </div>
+        <div class="header">
+            <h1 class="welcome-text">
+                Welcome, <?php echo htmlspecialchars(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? 'Student')); ?>
+            </h1>
+        </div>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Outstanding Balance</h3>
-                    <div class="value">ZWL <?php echo number_format($fees['balance'] ?? 0, 2); ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Total Paid</h3>
-                    <div class="value">ZWL <?php echo number_format($payment['amount'] ?? 0, 2); ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Last Payment</h3>
-                    <div class="value"><?php echo $last_payment_date ? date('d M Y', strtotime($last_payment_date)) : 'No payments'; ?></div>
-                </div>
-                <div class="stat-card">
-                    <h3>Payment Status</h3>
-                    <div class="value"><?php echo ($fees['balance'] ?? 0) <= 0 ? 'Fully Paid' : 'Pending'; ?></div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Outstanding Balance</h3>
+                <div class="value">ZWL <?php echo number_format($fees['balance'] ?? 0, 2); ?></div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Paid</h3>
+                <div class="value">ZWL <?php echo number_format($fees['total_paid'] ?? 0, 2); ?></div>
+            </div>
+            <div class="stat-card">
+                <h3>Last Payment</h3>
+                <div class="value">
+                    <?php 
+                    // Assuming $last_payment_date is available from the query
+                    echo $last_payment_date ? date('d M Y', strtotime($last_payment_date)) : 'No payments';
+                    ?>
                 </div>
             </div>
+            <div class="stat-card">
+                <h3>Payment Status</h3>
+                <div class="value">
+                    <?php echo ($fees['balance'] ?? 0) <= 0 ? 'Fully Paid' : 'Pending'; ?>
+                </div>
+            </div>
+        </div>
 
-            <div class="recent-payments">
-                <h3>Recent Payments</h3>
-                <table class="payments-table">
-                    <thead>
+        <div class="recent-payments">
+            <h3>Recent Payments</h3>
+            <table class="payments-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($recent_payments)): ?>
                         <tr>
-                            <th>Date</th>
-                            <th>Amount</th>
-                            <th>Reference</th>
-                            <th>Status</th>
+                            <td colspan="5" style="text-align: center;">No recent payments</td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($recent_payments)): ?>
+                    <?php else: ?>
+                        <?php foreach ($recent_payments as $payment): ?>
                             <tr>
-                                <td colspan="4" style="text-align: center;">No recent payments</td>
+                                <td><?php echo date('d M Y', strtotime($payment['paid_at'])); ?></td>
+                                <td>ZWL <?php echo number_format($payment['amount'], 2); ?></td>
                             </tr>
-                        <?php else: ?>
-                            <?php foreach ($recent_payments as $payment): ?>
-                                <tr>
-                                    <td><?php echo date('d M Y', strtotime($payment['paid_at'])); ?></td>
-                                    <td>ZWL <?php echo number_format($payment['amount'], 2); ?></td>
-                                    <td><?php echo htmlspecialchars($payment['id']); ?></td>
-                                    <td>Paid</td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+
 
             <div class="quick-actions">
                 <h3>Quick Actions</h3>

@@ -71,6 +71,11 @@ if (isset($_SESSION['poll_url'])) {
                             $updateResult = updateBalance($user_id, $new_balance);
                             if ($updateResult['success']) {
                                 $status_message .= "<br>💸 Fee balance updated successfully!";
+                                $message = "Your payment of $$amount was received successfully. Your remaining balance is $$new_balance.";
+                                $stmt = $conn->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
+                                $stmt->execute([$user_id, 'Payment Successful', $message]);
+
+
                             } else {
                                 $status_message .= "<br>⚠️ Failed to update balance: " . $updateResult['message'];
                             }

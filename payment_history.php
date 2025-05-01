@@ -300,6 +300,11 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <i class="fas fa-wallet"></i>
                     Check Balance
                 </a>
+                <a href="student_notification.php" class="nav-item">
+                    <i class="fas fa-bell"></i> 
+                    Notifications
+                </a>
+
                 <a href="change_password.php" class="nav-item">
                     <i class="fas fa-key"></i>
                     Change Password

@@ -10,7 +10,6 @@ if ($_SESSION['role'] != 'admin') {
 $error = '';
 $success = '';
 
-// Handle fee setting
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $program = $_POST['program'];
     $program_fee = $_POST['program_fee'];
@@ -22,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Check if program already exists
         $stmt = $conn->prepare("SELECT id FROM fees_structure WHERE program = ?");
         $stmt->execute([$program]);
+
         if ($stmt->rowCount() > 0) {
             // Update existing record
             $stmt = $conn->prepare("UPDATE fees_structure SET program_fee = ?, accommodation_fee = ? WHERE program = ?");
@@ -32,8 +32,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->execute([$program, $program_fee, $accommodation_fee]);
         }
 
+        // Build query to fetch relevant students
+        $query = "SELECT user_id FROM students WHERE program = ?";
+        $params = [$program];
+
+        if ($accommodation_fee > 0) {
+            $query .= " AND accommodation IS NOT NULL AND accommodation != ''";
+        }
+
+        $stmt = $conn->prepare($query);
+        $stmt->execute($params);
+        $students = $stmt->fetchAll();
+
+        foreach ($students as $student) {
+            $message = "A new fee structure has been set for your program. Program Fee: $$program_fee.";
+            
+            if ($accommodation_fee > 0) {
+                $message .= " Accommodation Fee: $$accommodation_fee.";
+            }
+
+            $stmt = $conn->prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
+            $stmt->execute([
+                $student['user_id'],
+                'New Fee Structure Updated',
+                $message
+            ]);
+        }
+
         $conn->commit();
-        $success = "✅ Fees set successfully.";
+        $success = "✅ Fees set successfully and students notified.";
     } catch (Exception $e) {
         $conn->rollBack();
         $error = "❌ Failed to set fees: " . $e->getMessage();

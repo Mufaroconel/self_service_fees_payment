@@ -10,34 +10,80 @@ if ($_SESSION['role'] != 'admin') {
 $error = '';
 $success = '';
 
-// Handle form submission
+function getFees($program, $level) {
+    global $conn;
+
+    // Check if the fee structure exists
+    $stmt = $conn->prepare("SELECT program_fee, accommodation_fee FROM fees_structure WHERE program = ? AND semester = ?");
+    $stmt->execute([$program, $level]);
+
+    $fees = $stmt->fetch();
+
+    if (!$fees) {
+        throw new Exception("❌ Fee structure not found for this program ($program), level ($level), and semester ($semester). Student not registered.");
+    }
+
+    $program_fee = $fees['program_fee'];
+    $accommodation_fee = $accommodation ? $fees['accommodation_fee'] : 0;
+
+    return $program_fee + $accommodation_fee;
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $username = $_POST['username'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $reg_number = $_POST['reg_number'];
     $fullname = $_POST['fullname'];
+    $email = $_POST['email'];
+    $phone = $_POST['phone'];
     $level = $_POST['level'];
+    $program = $_POST['program'];
     $accommodation = $_POST['accommodation'];
+    // $semester = $_POST['semester'];
     $role = "student";
+    $password = password_hash('default_password', PASSWORD_DEFAULT); // You can change this logic
 
     try {
-        $conn->beginTransaction();
+        // First, ensure fee structure exists BEFORE doing anything else
+        $total_fee = getFees($program, $level, $semester, $accommodation); // Will throw exception if not found
 
-        // Insert into users table
-        $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-        $stmt->execute([$username, $password, $role]);
-        $user_id = $conn->lastInsertId();
+        // Now check if the student already exists
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM students WHERE reg_number = ?");
+        $stmt->execute([$reg_number]);
+        $studentExists = $stmt->fetchColumn();
 
-        // Insert into students table
-        $stmt = $conn->prepare("INSERT INTO students (user_id, fullname, level, accommodation) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$user_id, $fullname, $level, $accommodation]);
+        if ($studentExists) {
+            $error = "❌ Student with registration number $reg_number already exists.";
+        } else {
+            $conn->beginTransaction();
 
-        $conn->commit();
-        $success = "✅ Student account created successfully.";
+            // Create user
+            $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
+            $stmt->execute([$reg_number, $password, $role]);
+            $user_id = $conn->lastInsertId();
+
+            // Create student
+            $stmt = $conn->prepare("INSERT INTO students (user_id, reg_number, fullname, email, phone, level, program, accommodation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$user_id, $reg_number, $fullname, $email, $phone, $level, $program, $accommodation]);
+
+            // Create fees record
+            $amount_paid = 0;
+            $balance = $total_fee;
+            $created_at = date('Y-m-d H:i:s');
+
+            $stmt = $conn->prepare("INSERT INTO fees (user_id, year, semester, total_fee, amount_paid, balance, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$user_id, $level, $level, $total_fee, $amount_paid, $balance, $created_at]);
+
+            $conn->commit();
+            $success = "✅ Student and fee record created successfully.";
+        }
+
     } catch (Exception $e) {
-        $conn->rollBack();
-        $error = "❌ Failed to create student: " . $e->getMessage();
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        $error = $e->getMessage(); // This already has the ❌ prefix from getFees() or catch block
     }
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -272,18 +318,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 <form method="POST" action="">
                     <div class="form-group">
-                        <label for="username">Username</label>
-                        <input type="text" id="username" name="username" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" required>
+                        <label for="reg_number">Registration Number</label>
+                        <input type="text" id="reg_number" name="reg_number" required>
                     </div>
 
                     <div class="form-group">
                         <label for="fullname">Full Name</label>
                         <input type="text" id="fullname" name="fullname" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="text" id="phone" name="phone" required>
                     </div>
 
                     <div class="form-group">
@@ -300,6 +351,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <option value="4.2">4.2</option>
                         </select>
                     </div>
+
+                    <div class="form-group">
+                        <label for="program">Program</label>
+                        <select id="program" name="program" required>
+                            <option value="">-- Select Program --</option>
+                            <?php
+                            // Fetch distinct programs from fees_structure
+                            $stmt = $conn->query("SELECT DISTINCT program FROM fees_structure ORDER BY program ASC");
+                            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                                echo "<option value=\"" . htmlspecialchars($row['program']) . "\">" . htmlspecialchars($row['program']) . "</option>";
+                            }
+                            ?>
+                        </select>
+                    </div>
+
 
                     <div class="form-group">
                         <label for="accommodation">Accommodation</label>
