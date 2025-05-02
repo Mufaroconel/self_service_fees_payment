@@ -1,9 +1,30 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+
 session_start();
+
 if ($_SESSION['role'] != 'admin') {
     header("Location: index.html");
     exit();
 }
+
+require 'db.php'; // Include your DB connection file
+
+$stmt = $conn->query("SELECT COUNT(*) as total FROM students");
+$total_students = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+
+$stmt = $conn->query("SELECT COUNT(*) as active FROM students WHERE reg_number IS NOT NULL");
+$active_students = $stmt->fetch(PDO::FETCH_ASSOC)['active'] ?? 0;
+
+$stmt = $conn->query("SELECT COUNT(*) as pending FROM students s LEFT JOIN payments p ON s.user_id = p.user_id WHERE p.user_id IS NULL");
+$pending_payments = $stmt->fetch(PDO::FETCH_ASSOC)['pending'] ?? 0;
+
+$stmt = $conn->query("SELECT SUM(amount) as today_total FROM payments WHERE DATE(paid_at) = CURDATE()");
+$todays_collections = number_format($stmt->fetch(PDO::FETCH_ASSOC)['today_total'] ?? 0, 2);
+
 ?>
 
 <!DOCTYPE html>
@@ -249,19 +270,19 @@ if ($_SESSION['role'] != 'admin') {
             <div class="stats-grid">
                 <div class="stat-card">
                     <h3>Total Students</h3>
-                    <div class="value">1,234</div>
+                    <div class="value"><?php echo $total_students; ?></div>
                 </div>
                 <div class="stat-card">
                     <h3>Pending Payments</h3>
-                    <div class="value">45</div>
+                    <div class="value"><?php echo $pending_payments; ?></div>
                 </div>
                 <div class="stat-card">
                     <h3>Today's Collections</h3>
-                    <div class="value">ZWL 25,000</div>
+                    <div class="value">ZWL <?php echo $todays_collections; ?></div>
                 </div>
                 <div class="stat-card">
                     <h3>Active Students</h3>
-                    <div class="value">1,189</div>
+                    <div class="value"><?php echo $active_students; ?></div>
                 </div>
             </div>
 
