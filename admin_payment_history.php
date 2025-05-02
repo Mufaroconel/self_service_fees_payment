@@ -240,7 +240,7 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <nav class="nav-menu">
                 <!-- Sidebar links -->
-                <a href="#" class="nav-item">
+                <a href="admin_dashboard.php" class="nav-item">
                     <i class="fas fa-home"></i>
                     Dashboard
                 </a>

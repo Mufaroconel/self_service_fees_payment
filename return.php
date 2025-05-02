@@ -13,7 +13,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
     header("Location: index.html");
     exit();
 }
-
+include('config.php');
 // Load Paynow library
 require_once 'vendor/autoload.php'; // adjust if needed
 
@@ -25,14 +25,13 @@ require_once 'update_fees_helper.php';
 
 use Paynow\Payments\Paynow;
 
-$return_url = "http://localhost/self_service_system/return.php?PHPSESSID=" . session_id();
 
 // Your Paynow credentials
 $paynow = new Paynow(
-    '20710',
-    '3b3d75b7-8ad2-4a55-9dfb-34d691822b1a',
+    PAYNOW_ID,
+    PAYNOW_KEY,
     $return_url,
-    'http://localhost/self_service_system/result.php'
+    $return_url
 );
 
 // Check if poll_url exists

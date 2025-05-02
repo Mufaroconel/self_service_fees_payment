@@ -10,7 +10,7 @@ if ($_SESSION['role'] != 'student') {
     header("Location: index.html");
     exit();
 }
-
+include('config.php');
 require 'db.php';
 require 'payment_initiated_helper.php';
 
@@ -33,14 +33,13 @@ $student = $stmt->fetch(PDO::FETCH_ASSOC);
 $stmt = $conn->prepare("SELECT * FROM fees WHERE user_id = ?");
 $stmt->execute([$user_id]);
 $fees = $stmt->fetch(PDO::FETCH_ASSOC);
-$return_url = "http://localhost/self_service_system/return.php?PHPSESSID=" . session_id();
 
 // Replace with your actual Paynow credentials
 $paynow = new Paynow(
-    '20710',
-    '3b3d75b7-8ad2-4a55-9dfb-34d691822b1a',
+    PAYNOW_ID,
+    PAYNOW_KEY,
     $return_url,
-    'http://localhost/self_service_system/result.php'  // result_url callback from Paynow
+    $return_url
 );
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
