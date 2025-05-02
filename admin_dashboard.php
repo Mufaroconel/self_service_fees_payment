@@ -248,10 +248,10 @@ $todays_collections = number_format($stmt->fetch(PDO::FETCH_ASSOC)['today_total'
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
                 </a>
-                <a href="payment_history.php" class="nav-item">
+                <!-- <a href="payment_history.php" class="nav-item">
                     <i class="fas fa-history"></i>
                     Payment History
-                </a>
+                </a> -->
                 <a href="reports.php" class="nav-item">
                     <i class="fas fa-chart-bar"></i>
                     Reports

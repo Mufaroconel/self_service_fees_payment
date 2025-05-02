@@ -1,0 +1,362 @@
+<?php
+session_start();
+require 'db.php';
+
+if ($_SESSION['role'] != 'admin') {
+    header("Location: index.html");
+    exit();
+}
+
+// Initialize filters
+$year = isset($_GET['year']) ? $_GET['year'] : '';
+$semester = isset($_GET['semester']) ? $_GET['semester'] : '';
+$program = isset($_GET['program']) ? $_GET['program'] : '';
+$startDate = isset($_GET['start_date']) ? $_GET['start_date'] : '';
+$endDate = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+$level = isset($_GET['level']) ? $_GET['level'] : '';
+
+// Fetch available years, semesters, programs, and levels for filter options
+$yearsStmt = $conn->prepare("SELECT DISTINCT year FROM fees ORDER BY year DESC");
+$yearsStmt->execute();
+$availableYears = $yearsStmt->fetchAll();
+
+$semestersStmt = $conn->prepare("SELECT DISTINCT semester FROM fees ORDER BY semester ASC");
+$semestersStmt->execute();
+$availableSemesters = $semestersStmt->fetchAll();
+
+$programsStmt = $conn->prepare("SELECT DISTINCT program FROM students ORDER BY program ASC");
+$programsStmt->execute();
+$availablePrograms = $programsStmt->fetchAll();
+
+$levelsStmt = $conn->prepare("SELECT DISTINCT level FROM fee_structure ORDER BY level ASC");
+$levelsStmt->execute();
+$availableLevels = $levelsStmt->fetchAll();
+
+// Build the WHERE clause dynamically based on selected filters
+$whereClauses = [];
+if ($year) $whereClauses[] = "f.year = :year";
+if ($semester) $whereClauses[] = "f.semester = :semester";
+if ($program) $whereClauses[] = "s.program = :program";
+if ($startDate && $endDate) $whereClauses[] = "f.date BETWEEN :start_date AND :end_date";
+if ($level) $whereClauses[] = "fs.level = :level";
+
+// Combine WHERE clauses
+$whereSql = implode(' AND ', $whereClauses);
+
+// Fetch filtered data
+$stmtStudents = $conn->prepare("SELECT s.fullname, f.total_fee, f.amount_paid, f.balance FROM fees f 
+    INNER JOIN students s ON f.user_id = s.user_id
+    INNER JOIN fee_structure fs ON fs.program = s.program " . ($whereSql ? ' WHERE ' . $whereSql : ''));
+if ($year) $stmtStudents->bindParam(':year', $year);
+if ($semester) $stmtStudents->bindParam(':semester', $semester);
+if ($program) $stmtStudents->bindParam(':program', $program);
+if ($startDate && $endDate) $stmtStudents->bindParam(':start_date', $startDate);
+if ($startDate && $endDate) $stmtStudents->bindParam(':end_date', $endDate);
+if ($level) $stmtStudents->bindParam(':level', $level);
+$stmtStudents->execute();
+$studentsData = $stmtStudents->fetchAll();
+
+// Additional data for reports
+$stmt = $conn->prepare("SELECT SUM(total_fee) AS total_fee, SUM(amount_paid) AS total_paid, SUM(balance) AS total_balance FROM fees" . ($whereSql ? ' WHERE ' . $whereSql : ''));
+$stmt->execute();
+$feesSummary = $stmt->fetch();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Financial Reports</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f7fb;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            padding: 40px;
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            color: #4E5D6C;
+            margin-bottom: 40px;
+        }
+        .filters {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .filter-box {
+            flex: 1;
+            margin: 0 10px;
+        }
+        .filter-box select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+        }
+        .filter-box label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .summary-boxes {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .summary-box {
+            background-color: #007BFF;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            flex: 1;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .summary-box h4 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .summary-box p {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .summary-box1 {
+            background-color: #28A745;
+        }
+        .summary-box2 {
+            background-color: #FFC107;
+        }
+        .summary-box3 {
+            background-color: #DC3545;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            font-size: 16px;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 30px;
+            text-decoration: none;
+            color: #007BFF;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .print-btn {
+            background-color: #007BFF;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 0 auto;
+        }
+        .print-btn:hover {
+            background-color: #0056b3;
+        }
+        .charts {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .chart-container {
+            width: 48%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Advanced Financial Reports</h2>
+
+    <!-- Filter Section -->
+    <div class="filters">
+        <div class="filter-box">
+            <label for="year">Year</label>
+            <select id="year" name="year" onchange="applyFilters()">
+                <option value="">Select Year</option>
+                <?php foreach ($availableYears as $yearOption): ?>
+                    <option value="<?= $yearOption['year'] ?>" <?= $year == $yearOption['year'] ? 'selected' : '' ?>><?= $yearOption['year'] ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-box">
+            <label for="semester">Semester</label>
+            <select id="semester" name="semester" onchange="applyFilters()">
+                <option value="">Select Semester</option>
+                <?php foreach ($availableSemesters as $semesterOption): ?>
+                    <option value="<?= $semesterOption['semester'] ?>" <?= $semester == $semesterOption['semester'] ? 'selected' : '' ?>>Semester <?= $semesterOption['semester'] ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-box">
+            <label for="program">Program</label>
+            <select id="program" name="program" onchange="applyFilters()">
+                <option value="">Select Program</option>
+                <?php foreach ($availablePrograms as $programOption): ?>
+                    <option value="<?= $programOption['program'] ?>" <?= $program == $programOption['program'] ? 'selected' : '' ?>><?= $programOption['program'] ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-box">
+            <label for="start_date">Start Date</label>
+            <input type="date" id="start_date" name="start_date" value="<?= $startDate ?>" onchange="applyFilters()">
+        </div>
+        <div class="filter-box">
+            <label for="end_date">End Date</label>
+            <input type="date" id="end_date" name="end_date" value="<?= $endDate ?>" onchange="applyFilters()">
+        </div>
+        <div class="filter-box">
+            <label for="level">Level</label>
+            <select id="level" name="level" onchange="applyFilters()">
+                <option value="">Select Level</option>
+                <?php foreach ($availableLevels as $levelOption): ?>
+                    <option value="<?= $levelOption['level'] ?>" <?= $level == $levelOption['level'] ? 'selected' : '' ?>>Level <?= $levelOption['level'] ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+
+    <!-- Summary Section -->
+    <div class="summary-boxes">
+        <div class="summary-box summary-box1">
+            <h4>Total Fees</h4>
+            <p><?= number_format($feesSummary['total_fee'], 2) ?></p>
+        </div>
+        <div class="summary-box summary-box2">
+            <h4>Total Paid</h4>
+            <p><?= number_format($feesSummary['total_paid'], 2) ?></p>
+        </div>
+        <div class="summary-box summary-box3">
+            <h4>Total Balance</h4>
+            <p><?= number_format($feesSummary['total_balance'], 2) ?></p>
+        </div>
+    </div>
+
+    <!-- Data Table Section -->
+    <table>
+        <thead>
+        <tr>
+            <th>Full Name</th>
+            <th>Total Fee</th>
+            <th>Amount Paid</th>
+            <th>Balance</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($studentsData as $student): ?>
+            <tr>
+                <td><?= $student['fullname'] ?></td>
+                <td><?= number_format($student['total_fee'], 2) ?></td>
+                <td><?= number_format($student['amount_paid'], 2) ?></td>
+                <td><?= number_format($student['balance'], 2) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <!-- Print Button -->
+    <button class="print-btn" onclick="window.print()">Print Report</button>
+
+    <!-- Back Link -->
+    <a href="admin-dashboard.php" class="back-link">Back to Dashboard</a>
+</div>
+
+<script>
+    // Function to apply the selected filters and reload the page
+    function applyFilters() {
+        const year = document.getElementById('year').value;
+        const semester = document.getElementById('semester').value;
+        const program = document.getElementById('program').value;
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        const level = document.getElementById('level').value;
+        const queryString = `?year=${year}&semester=${semester}&program=${program}&start_date=${startDate}&end_date=${endDate}&level=${level}`;
+        window.location.href = queryString;
+    }
+
+    // Chart.js for visualizing fees
+    const feesCtx = document.getElementById('feesChart').getContext('2d');
+    const feesChart = new Chart(feesCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Total Fee', 'Total Paid', 'Balance'],
+            datasets: [{
+                label: 'Fees Summary',
+                data: [<?= $feesSummary['total_fee'] ?>, <?= $feesSummary['total_paid'] ?>, <?= $feesSummary['total_balance'] ?>],
+                backgroundColor: ['#007BFF', '#28A745', '#DC3545'],
+                borderColor: ['#0056b3', '#218838', '#bd2130'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Chart.js for visualizing excess fees
+    const excessCtx = document.getElementById('excessChart').getContext('2d');
+    const excessChart = new Chart(excessCtx, {
+        type: 'line',
+        data: {
+            labels: ['Excess Amount'],
+            datasets: [{
+                label: 'Excess Fees',
+                data: [<?= number_format($feesSummary['total_balance'], 2) ?>],  // Example excess value
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
