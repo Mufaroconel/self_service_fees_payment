@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $program = $_POST['program'];
     $accommodation = $_POST['accommodation'];
     $role = "student";
-    $password = password_hash('default_password', PASSWORD_DEFAULT);
+    $password = password_hash($fullname, PASSWORD_DEFAULT);
 
     try {
         // Check fee structure exists
@@ -290,10 +290,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
                 </a>
-                <!-- <a href="payment_history.php" class="nav-item">
+                <a href="admin_payment_history.php" class="nav-item">
                     <i class="fas fa-history"></i>
                     Payment History
-                </a> -->
+                </a>
                 <a href="reports.php" class="nav-item">
                     <i class="fas fa-chart-bar"></i>
                     Reports

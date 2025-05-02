@@ -240,7 +240,7 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
             <nav class="nav-menu">
                 <!-- Sidebar links -->
-                <a href="#" class="nav-item active">
+                <a href="#" class="nav-item">
                     <i class="fas fa-home"></i>
                     Dashboard
                 </a>
@@ -256,7 +256,7 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <i class="fas fa-money-bill-wave"></i>
                     Manage Fees
                 </a>
-                <a href="payment_history.php" class="nav-item">
+                <a href="admin_payment_history.php" class="nav-item active">
                     <i class="fas fa-history"></i>
                     Payment History
                 </a>
@@ -273,6 +273,12 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <a href="record_payment.php" class="action-button">
                     <i class="fas fa-plus"></i> Record Payment
                 </a>
+            </div>
+            <!-- Print Button -->
+            <div class="print-button">
+                <button onclick="printTable()" class="action-button">
+                    <i class="fas fa-print"></i> Print Payment History
+                </button>
             </div>
 
             <!-- Filter form -->
@@ -293,7 +299,7 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
 
             <!-- Payments table -->
-            <table class="payments-table">
+            <table id="payments-table" class="payments-table">
                 <thead>
                     <tr>
                         <th>Student Name</th>
@@ -320,5 +326,16 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </main>
     </div>
 </body>
+<script>
+        function printTable() {
+            var printContent = document.getElementById('payments-table').outerHTML;
+            var printWindow = window.open('', '', 'height=400,width=600');
+            printWindow.document.write('<html><head><title>Payment History</title></head><body>');
+            printWindow.document.write(printContent);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+    </script>
 </html>
 
