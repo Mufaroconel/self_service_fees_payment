@@ -12,29 +12,44 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $program = $_POST['program'];
+    $level = $_POST['level'];
     $program_fee = $_POST['program_fee'];
     $accommodation_fee = $_POST['accommodation_fee'];
+
+    list($main, $sub) = explode('.', $level); // Split level into parts
+    if ($sub == "2") {
+        // If it's x.2, notify x.1
+        $notify_level = $main . ".1";
+    } else {
+        // If it's x.1, notify (x-1).2, but only if x > 1
+        $main = intval($main);
+        if ($main > 1) {
+            $notify_level = ($main - 1) . ".2";
+        } else {
+            $notify_level = null; // No previous level to notify
+        }
+    }
 
     try {
         $conn->beginTransaction();
 
         // Check if program already exists
-        $stmt = $conn->prepare("SELECT id FROM fees_structure WHERE program = ?");
-        $stmt->execute([$program]);
+        $stmt = $conn->prepare("SELECT id FROM fees_structure WHERE program = ? AND level = ?");
+        $stmt->execute([$program, $level]);
 
         if ($stmt->rowCount() > 0) {
             // Update existing record
-            $stmt = $conn->prepare("UPDATE fees_structure SET program_fee = ?, accommodation_fee = ? WHERE program = ?");
-            $stmt->execute([$program_fee, $accommodation_fee, $program]);
+            $stmt = $conn->prepare("UPDATE fees_structure SET program_fee = ?, accommodation_fee = ? WHERE program = ? AND level=?");
+            $stmt->execute([$program_fee, $accommodation_fee, $program, $level]);
         } else {
             // Insert new record
-            $stmt = $conn->prepare("INSERT INTO fees_structure (program, program_fee, accommodation_fee) VALUES (?, ?, ?)");
-            $stmt->execute([$program, $program_fee, $accommodation_fee]);
+            $stmt = $conn->prepare("INSERT INTO fees_structure (program, level, program_fee,accommodation_fee) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$program, $level, $program_fee, $accommodation_fee]);
         }
 
         // Build query to fetch relevant students
-        $query = "SELECT user_id FROM students WHERE program = ?";
-        $params = [$program];
+        $query = "SELECT user_id FROM students WHERE program = ? AND level = ?";
+        $params = [$program, $notify_level];
 
         if ($accommodation_fee > 0) {
             $query .= " AND accommodation IS NOT NULL AND accommodation != ''";
@@ -45,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $students = $stmt->fetchAll();
 
         foreach ($students as $student) {
-            $message = "A new fee structure has been set for your program. Program Fee: $$program_fee.";
+            $message = "Heads up! Fees for your next semester ($level) in $program are set. You'll be paying $$program_fee.";
             
             if ($accommodation_fee > 0) {
                 $message .= " Accommodation Fee: $$accommodation_fee.";
@@ -330,7 +345,7 @@ $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
 
                 <form method="POST" action="">
-                    <div class="form-group">
+                <div class="form-group">
                         <label for="program">Program</label>
                         <select id="program" name="program" required>
                             <option value="">-- Select Program --</option>
@@ -339,6 +354,21 @@ $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <option value="Accounting">Accounting</option>
                             <option value="Engineering">Engineering</option>
                             <option value="Law">Law</option>
+                            <!-- You can add more programs here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="program">Level</label>
+                        <select id="level" name="level" required>
+                            <option value="">-- Select Level --</option>
+                            <option value="1.1">1.1</option>
+                            <option value="1.2">1.2</option>
+                            <option value="2.1">2.1</option>
+                            <option value="2.2">2.2</option>
+                            <option value="3.1">3.1</option>
+                            <option value="3.2">3.2</option>
+                            <option value="4.1">4.1</option>
+                            <option value="4.2">4.2</option>
                             <!-- You can add more programs here -->
                         </select>
                     </div>
@@ -364,6 +394,7 @@ $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <thead>
                             <tr style="background-color: #3182ce; color: #fff;">
                                 <th style="padding: 0.75rem; text-align: left;">Program</th>
+                                <th style="padding: 0.75rem; text-align: left;">Level</th>
                                 <th style="padding: 0.75rem; text-align: left;">Program Fee (USD)</th>
                                 <th style="padding: 0.75rem; text-align: left;">Accommodation Fee (USD)</th>
                             </tr>
@@ -373,6 +404,7 @@ $fees = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <?php foreach ($fees as $fee): ?>
                                     <tr style="border-bottom: 1px solid #e2e8f0;">
                                         <td style="padding: 0.75rem;"><?php echo htmlspecialchars($fee['program']); ?></td>
+                                        <td style="padding: 0.75rem;"><?php echo htmlspecialchars($fee['level']); ?></td>
                                         <td style="padding: 0.75rem;"><?php echo number_format($fee['program_fee'], 2); ?></td>
                                         <td style="padding: 0.75rem;"><?php echo number_format($fee['accommodation_fee'], 2); ?></td>
                                     </tr>
