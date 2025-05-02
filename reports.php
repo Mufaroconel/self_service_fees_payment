@@ -246,7 +246,7 @@ $paymentsHistory = $stmtPayments->fetchAll();
 
     <button class="print-btn" onclick="window.print()">Print Report</button>
 
-    <a class="back-link" href="dashboard.php">⬅ Back to Dashboard</a>
+    <a class="back-link" href="admin_dashboard.php">⬅ Back to Dashboard</a>
 </div>
 
 </body>

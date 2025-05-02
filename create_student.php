@@ -10,21 +10,20 @@ if ($_SESSION['role'] != 'admin') {
 $error = '';
 $success = '';
 
-function getFees($program, $level) {
+function getFees($program, $level, $accommodation) {
     global $conn;
 
-    // Check if the fee structure exists
-    $stmt = $conn->prepare("SELECT program_fee, accommodation_fee FROM fees_structure WHERE program = ? AND semester = ?");
+    $stmt = $conn->prepare("SELECT program_fee, accommodation_fee FROM fees_structure WHERE program = ? AND level = ?");
     $stmt->execute([$program, $level]);
 
     $fees = $stmt->fetch();
 
     if (!$fees) {
-        throw new Exception("❌ Fee structure not found for this program ($program), level ($level), and semester ($semester). Student not registered.");
+        throw new Exception("❌ Fee structure not found for program ($program) and level ($level).");
     }
 
     $program_fee = $fees['program_fee'];
-    $accommodation_fee = $accommodation ? $fees['accommodation_fee'] : 0;
+    $accommodation_fee = strtolower($accommodation) === 'resident' ? $fees['accommodation_fee'] : 0;
 
     return $program_fee + $accommodation_fee;
 }
@@ -37,15 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $level = $_POST['level'];
     $program = $_POST['program'];
     $accommodation = $_POST['accommodation'];
-    // $semester = $_POST['semester'];
     $role = "student";
-    $password = password_hash('default_password', PASSWORD_DEFAULT); // You can change this logic
+    $password = password_hash('default_password', PASSWORD_DEFAULT);
 
     try {
-        // First, ensure fee structure exists BEFORE doing anything else
-        $total_fee = getFees($program, $level, $semester, $accommodation); // Will throw exception if not found
+        // Check fee structure exists
+        $total_fee = getFees($program, $level, $accommodation);
 
-        // Now check if the student already exists
+        // Check if student already exists
         $stmt = $conn->prepare("SELECT COUNT(*) FROM students WHERE reg_number = ?");
         $stmt->execute([$reg_number]);
         $studentExists = $stmt->fetchColumn();
@@ -64,13 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt = $conn->prepare("INSERT INTO students (user_id, reg_number, fullname, email, phone, level, program, accommodation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$user_id, $reg_number, $fullname, $email, $phone, $level, $program, $accommodation]);
 
-            // Create fees record
+            // Create fee record
             $amount_paid = 0;
             $balance = $total_fee;
             $created_at = date('Y-m-d H:i:s');
 
-            $stmt = $conn->prepare("INSERT INTO fees (user_id, year, semester, total_fee, amount_paid, balance, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$user_id, $level, $level, $total_fee, $amount_paid, $balance, $created_at]);
+            $stmt = $conn->prepare("INSERT INTO fees (user_id, total_fee, amount_paid, balance, created_at, level) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$user_id, $total_fee, $amount_paid, $balance, $created_at, $level]);
 
             $conn->commit();
             $success = "✅ Student and fee record created successfully.";
@@ -80,11 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($conn->inTransaction()) {
             $conn->rollBack();
         }
-        $error = $e->getMessage(); // This already has the ❌ prefix from getFees() or catch block
+        $error = $e->getMessage();
     }
 }
-
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
